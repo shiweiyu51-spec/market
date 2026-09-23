@@ -1,0 +1,44 @@
+name: Financial Market Monitor
+
+on:
+  schedule:
+    # 每 15 分钟启动一次容器（容器内持续运行 14 分钟，每 30 秒轮询一次）
+    - cron: '*/15 * * * 1-5'
+  workflow_dispatch:
+
+# 避免重叠运行时并发写基准产生冲突
+concurrency:
+  group: market-monitor
+  cancel-in-progress: false
+
+jobs:
+  run-market-monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install yfinance
+
+      - name: Run 30s Loop Monitor Script
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          python monitor.py
+
+      - name: Commit & Push Baseline Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_baseline.json || true
+          git commit -m "Update market baseline [skip ci]" || true
+          git push || true
