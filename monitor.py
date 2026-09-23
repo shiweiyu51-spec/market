@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import smtplib
 from email.mime.text import MIMEText
 from email.header import Header
@@ -7,7 +8,6 @@ from email.utils import formataddr
 import yfinance as yf
 from datetime import datetime
 
-# 从 GitHub Secrets 环境变量中安全获取
 EMAIL_USER = os.environ.get("EMAIL_USER")
 EMAIL_PASS = os.environ.get("EMAIL_PASS")
 EMAIL_TO = os.environ.get("EMAIL_TO")
@@ -20,7 +20,9 @@ SYMBOLS = {
     "十年期美债收益率": "^TNX"
 }
 
-THRESHOLD = 0.01          # 波动阈值 1%
+THRESHOLD = 0.01          # 变动阈值：1%
+CHECK_INTERVAL = 30       # 采样频率：每 30 秒检测一次
+RUN_DURATION = 840        # 每次任务持续运行 14 分钟（留 1 分钟缓冲给接力任务）
 CACHE_FILE = "market_baseline.json"
 
 def send_email(subject, html_content):
@@ -64,7 +66,7 @@ def fetch_latest_prices():
                 if info_price:
                     prices[name] = round(float(info_price), 3)
         except Exception as e:
-            print(f"[{name}] 获取价格失败: {e}")
+            print(f"[{name}] 获取价格异常: {e}")
     return prices
 
 def check_market():
@@ -113,7 +115,20 @@ def check_market():
         """
         send_email(subject, html_body)
     else:
-        print(f"[{now_str}] 监测正常，暂无变动超过 1% 的品种。")
+        print(f"[{now_str}] 30秒周期检测正常，无单次异动超 1%。")
+
+def main():
+    print(f"🚀 启动 30 秒高频监控，当前任务将持续轮询 {RUN_DURATION // 60} 分钟...")
+    start_time = time.time()
+    
+    while time.time() - start_time < RUN_DURATION:
+        try:
+            check_market()
+        except Exception as e:
+            print(f"检测异常: {e}")
+        time.sleep(CHECK_INTERVAL)
+
+    print("🏁 当前批次检测结束，退出以便保存最新基准并等待下一批接力。")
 
 if __name__ == "__main__":
-    check_market()
+    main()
